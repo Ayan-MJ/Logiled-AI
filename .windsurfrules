@@ -1,0 +1,62 @@
+Below is a “Windsurf Context” block you can drop into your workspace or pass as a “global prompt” so every generated snippet follows the same conventions:
+
+---
+
+### Windsurf Global Context / Rules
+
+1. **Project Structure & Naming**  
+   - Root package: `logilead/`  
+   - Modules under `logilead/`:  
+     - `scraper.py` (tender scraping)  
+     - `db.py` (models & persistence)  
+     - `scheduler.py` (job scheduling)  
+     - `alerter.py` (email notifications)  
+     - `run_all.py` (integrator / smoke-test)  
+   - Config: a `.env` file at project root, never checked in.  
+   - Tests under `tests/`, mirroring the module structure with pytest.
+
+2. **Coding Style**  
+   - Follow **PEP8**: 79-char line limit, snake_case for functions/variables, PascalCase for classes.  
+   - Include docstrings on every public function in Google style.  
+   - Use **type hints** everywhere.  
+
+3. **Environment & Secrets**  
+   - Load all credentials and URLs via `python-dotenv` from `.env`.  
+   - Access via `LOGILEAD_DB_URL`, `SMTP_HOST`, etc.  
+   - Never hard-code secrets.
+
+4. **Logging & Error Handling**  
+   - Use the standard `logging` module.  
+   - On failures (network, parsing, DB), log an ERROR with stack trace, but don’t crash the scheduler.  
+   - Wrap third-party calls in try/except and retry once before giving up.
+
+5. **Database Access**  
+   - Use **SQLAlchemy** ORM with a single `engine` object.  
+   - Session scope per-job; always `.commit()` on success, `.rollback()` on exception, then close.  
+   - Model classes defined in `db.py`, reflections only if necessary.
+
+6. **Scraping Conventions**  
+   - Single responsibility: one function per source (e.g. `fetch_gem_tenders()`).  
+   - Return a list of plain dicts; mapping to ORM happens in `db.py`.  
+   - Include a `_parse_*` helper to extract and normalize dates (ISO format).
+
+7. **Scheduling**  
+   - Use **APScheduler**’s `BackgroundScheduler` in `scheduler.py`.  
+   - Schedule: `CronTrigger` at `00:30` daily (server-local time).  
+   - Expose a `start_scheduler()` entry-point.
+
+8. **Alerts & Email**  
+   - `alerter.py` provides `send_email(to: List[str], subject: str, body: str)`.  
+   - Email layout: plain text, 72-char wrap, bullet list of “• Title – Issuer (City) – YYYY-MM-DD”.  
+   - Recipients read from `ALERT_RECIPIENTS` env var (comma-separated).
+
+9. **Idempotency & Deduplication**  
+   - Ingestion: before saving, check if URL hash exists; skip if so.  
+   - Persist a `fetched_at` timestamp on every record, even duplicates (for auditing).
+
+10. **Documentation**  
+    - Update `README.md` with: setup steps, `.env` vars, how to run `run_all.py`, and how to enable the scheduler.  
+    - After each chunk is complete, add usage snippets under a “Usage” heading.
+
+---
+
