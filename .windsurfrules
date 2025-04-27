@@ -4,6 +4,8 @@ Below is a “Windsurf Context” block you can drop into your workspace or pass
 
 ### Windsurf Global Context / Rules
 
+### This is Phase 1 : Tender-Only MVP
+
 1. **Project Structure & Naming**  
    - Root package: `logilead/`  
    - Modules under `logilead/`:  
@@ -57,6 +59,165 @@ Below is a “Windsurf Context” block you can drop into your workspace or pass
 10. **Documentation**  
     - Update `README.md` with: setup steps, `.env` vars, how to run `run_all.py`, and how to enable the scheduler.  
     - After each chunk is complete, add usage snippets under a “Usage” heading.
+
+Here’s a concise ruleset you can drop into Windsurf’s global context so every prompt and snippet adheres to the same conventions:
+
+---
+
+### This is Phase 2: News & Job-Board Scanning
+
+1. **Project Layout**  
+   - All code lives under `logilead/` with modules:  
+     `scraper.py`, `news_scraper.py`, `job_scraper.py`, `filters.py`, `scoring.py`, `db.py`, `alerter.py`, `scheduler.py`, `run_all.py`.
+
+2. **Config & Secrets**  
+   - Use a `.env` file for all credentials and URLs.  
+   - Env vars: `LOGILEAD_DB_URL`, `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `NEWS_API_KEY`, `JOB_TITLES`, `TARGET_CITIES`, `ALERT_RECIPIENTS`, etc.
+
+3. **Styling & Standards**  
+   - Follow **PEP8**: 79-char width, snake_case, PascalCase for classes.  
+   - Include **Google-style docstrings** and **type hints** everywhere.
+
+4. **Dependency Management**  
+   - List everything in `requirements.txt`.  
+   - Dependencies include: `requests`, `beautifulsoup4`, `sqlalchemy`, `psycopg2-binary`, `apscheduler`, `python-dotenv`.
+
+5. **Logging & Resilience**  
+   - Use Python’s `logging` module.  
+   - Wrap external calls in try/except with a single retry.  
+   - On failure, log an ERROR but keep the scheduler alive.
+
+6. **Database Access**  
+   - Use **SQLAlchemy ORM** with a single `engine` and scoped sessions.  
+   - Commit on success, rollback on exception, then close session.
+
+7. **Scraper Conventions**  
+   - One source per function (e.g. `fetch_gem_tenders()`, `fetch_industry_news()`, `fetch_job_postings()`).  
+   - Return plain `List[Dict]`; mapping to ORM happens in `db.py`.  
+   - Normalize dates to ISO format in dedicated helpers.
+
+8. **Scheduling**  
+   - Use **APScheduler**’s `BackgroundScheduler`.  
+   - Schedule daily jobs at `00:30` server-local time via `CronTrigger`.  
+   - Expose a `start_scheduler()` entry-point.
+
+9. **Alert Formatting**  
+   - Plain-text emails, 72-char wrap.  
+   - Sections: “🔥 Top Tenders”, “📣 Top News Leads”, “💼 Top Job Leads”.  
+   - Each line:  
+     ```
+     • {title} – {issuer/company} ({location}) – {YYYY-MM-DD} – Score: {lead_score:.2f}
+     ```
+
+10. **Testing & Documentation**  
+    - Write **pytest** tests in `tests/` mirroring module names.  
+    - Update `README.md` after each phase with setup steps, env vars, usage examples, and how to run the scheduler.
+
+---
+
+### This is Phase 3: Dashboard & Advanced Features
+
+1. **Project Layout**  
+   ```
+   logilead/          ← Python package (backend logic)
+   ├── __init__.py
+   ├── scraper.py
+   ├── news_scraper.py
+   ├── job_scraper.py
+   ├── filters.py
+   ├── scoring.py
+   ├── ml_model.py
+   ├── db.py
+   ├── api.py         ← FastAPI app
+   └── ...            ← other backend modules
+   frontend/          ← React + TypeScript (Vite)
+   docs/              ← DEPLOY.md, architecture diagrams
+   tests/             ← pytest unit/integration tests
+   Dockerfile
+   docker-compose.yml
+   README.md
+   .env.example
+   ```
+
+2. **Backend Coding Style**  
+   - PEP 8 with 79-char line limit.  
+   - Full **type hints** & **Google-style docstrings**.  
+   - One responsibility per module; keep functions small & pure where possible.  
+   - Use `async` I/O in FastAPI routes for DB and WebSocket efficiency.
+
+3. **FastAPI API Conventions**  
+   - Base path `/api/v1`.  
+   - All responses wrapped: `{ "data": …, "error": null }`.  
+   - Pagination params: `page`, `page_size`, default 25.  
+   - CORS enabled for the frontend origin via env var `FRONTEND_ORIGIN`.
+
+4. **Database Access**  
+   - Single SQLAlchemy `engine` and `SessionLocal()` factory in `db.py`.  
+   - Each request gets a `Depends(get_db)` session that **closes after use**.  
+   - Alembic migrations under `migrations/`; versioned, auto-generated.
+
+5. **ML & Scoring**  
+   - Store trained models in `models/` and load with `joblib`.  
+   - If the model file is missing, default to rule-based scoring and log a warning.
+
+6. **Logging & Observability**  
+   - Use `logging.config.dictConfig` for structured JSON logs.  
+   - Levels: DEBUG (dev), INFO (prod default).  
+   - All exceptions captured with stack traces; WebSocket errors logged but connection kept alive.
+
+7. **React Frontend Style**  
+   - TypeScript strict mode; functional components only.  
+   - Fetch with Axios; keep API base URL in `.env`.  
+   - Tailwind CSS for styling; adhere to a light grey-on-white minimalist theme.  
+   - Components live under `src/components/`; hooks under `src/hooks/`.  
+   - Use `react-query` for data fetching & caching.  
+   - Toast notifications via `react-hot-toast`.  
+   - All user-visible text in English, sentence-case.
+
+8. **WebSockets**  
+   - FastAPI `WebSocketEndpoint` at `/ws/alerts`.  
+   - Broadcast only leads where `lead_score >= ALERT_THRESHOLD` (env).  
+   - Frontend maintains a single reconnecting WebSocket; backs off exponentially on errors.
+
+9. **Security & Secrets**  
+   - Never hard-code secrets. Load from `.env` or Docker secrets.  
+   - Enable HTTPS & HSTS when deploying behind an ALB / CloudFront.  
+   - Sanitize all external HTML (scraped) before storing or sending.
+
+10. **Docker & Deployment**  
+    - Multi-stage Dockerfile:  
+      1. `python:3.11-slim` build stage installs deps.  
+      2. Copy source, expose `8000`, run `uvicorn logilead.api:app`.  
+    - `docker-compose.yml` contains `db`, `app`, `frontend`, and an optional `worker` service for schedulers.  
+    - Healthchecks: `/api/v1/health` for backend; `/` for frontend.  
+    - Provide `DEPLOY.md` with ECS → Fargate instructions and `docker compose up -d` for local dev.
+
+11. **Testing**  
+    - Backend: pytest + `pytest-asyncio` for async routes.  
+    - Frontend: React Testing Library + Jest; snapshots for critical UI.  
+    - Minimum 80 % coverage gate in CI.
+
+12. **CI / CD**  
+    - GitHub Actions workflow:  
+      - Lint (`ruff`), type-check (`mypy`), test, build Docker images.  
+      - Push images to AWS ECR on `main` branch merge.
+
+13. **Documentation**  
+    - `README.md`: quick-start, env vars, local dev, production deploy.  
+    - `docs/ARCHITECTURE.md`: high-level diagram (text description acceptable).  
+    - Each module starts with a short purpose statement.
+
+14. **Commit & Branching**  
+    - Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`.  
+    - Feature branches merged via PR; require passing CI.
+
+15. **Extensibility Hooks**  
+    - New lead sources must be pluggable: implement an abstract `BaseScraper` with `.fetch()`.  
+    - Additional ML models should subclass `BaseModel` with `.train()` and `.predict()`.
+
+---
+
+
 
 ---
 
